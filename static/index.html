@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sentiment Analysis Engine</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+    <div class="app-container">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2>Sentiment Engine</h2>
+            </div>
+            <ul class="nav-list">
+                <li class="nav-item active" data-page="page-vader">
+                    <i class="fa-solid fa-bolt"></i>
+                    <span>VADER Analysis</span>
+                </li>
+                <li class="nav-item" data-page="page-hf">
+                    <i class="fa-solid fa-brain"></i>
+                    <span>Hugging Face Analysis</span>
+                </li>
+                <li class="nav-item" data-page="page-comparison">
+                    <i class="fa-solid fa-code-compare"></i>
+                    <span>VADER vs. Hugging Face</span>
+                </li>
+                <li class="nav-item" data-page="page-topwords">
+                    <i class="fa-solid fa-font"></i>
+                    <span>Top Words</span>
+                </li>
+                <li class="nav-item" data-page="page-database">
+                    <i class="fa-solid fa-database"></i>
+                    <span>Database & Download</span>
+                </li>
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            
+            <section class="page-content" id="page-vader">
+                <h1>VADER Sentiment Analysis</h1>
+                <div class="content-layout">
+                    <div class="input-card">
+                        <h3><i class="fa-solid fa-keyboard"></i> Input</h3>
+                        <p>Enter text or upload a .txt / .csv file.</p>
+                        
+                        <textarea id="vader-text-input" placeholder="Type or paste your text here..."></textarea>
+                        
+                        <div class="divider"><span>OR</span></div>
+                        
+                        <label for="vader-file-input" class="file-label">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <span id="vader-file-name">Upload a File (.txt or .csv)</span>
+                        </label>
+                        <input type="file" id="vader-file-input" accept=".txt,.csv" />
+                        
+                        <button id="vader-analyze-button">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            Analyze with VADER
+                        </button>
+                    </div>
+                    
+                    <div class="output-card" id="vader-output-area">
+                        <div class="placeholder" id="vader-placeholder">
+                            <i class="fa-solid fa-chart-pie"></i>
+                            <p>Results will appear here</p>
+                        </div>
+                        <div class="loader-container" id="vader-loader">
+                            <div class="loader"></div>
+                            <p>Analyzing...</p>
+                        </div>
+                        <div class="results-wrapper" id="vader-results-wrapper">
+                            <div class="stats-card"></div>
+                            <div class="preview-card"></div>
+                            <div class="chart-card">
+                                <canvas id="vader-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="page-content" id="page-hf" style="display: none;">
+                <h1>Hugging Face Analysis (RoBERTa)</h1>
+                <div class="content-layout">
+                    <div class="input-card">
+                        <h3><i class="fa-solid fa-keyboard"></i> Input</h3>
+                        <p>Enter text or upload a .txt / .csv file.</p>
+                        
+                        <textarea id="hf-text-input" placeholder="Type or paste your text here..."></textarea>
+                        
+                        <div class="divider"><span>OR</span></div>
+                        
+                        <label for="hf-file-input" class="file-label">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <span id="hf-file-name">Upload a File (.txt or .csv)</span>
+                        </label>
+                        <input type="file" id="hf-file-input" accept=".txt,.csv" />
+                        
+                        <button id="hf-analyze-button">
+                            <i class="fa-solid fa-brain"></i>
+                            Analyze with Hugging Face
+                        </button>
+                    </div>
+                    
+                    <div class="output-card" id="hf-output-area">
+                        <div class="placeholder" id="hf-placeholder">
+                            <i class="fa-solid fa-chart-pie"></i>
+                            <p>Results will appear here</p>
+                        </div>
+                        <div class="loader-container" id="hf-loader">
+                            <div class="loader"></div>
+                            <p>Analyzing (this may be slow)...</p>
+                        </div>
+                        <div class="results-wrapper" id="hf-results-wrapper">
+                            <div class="stats-card"></div>
+                            <div class="preview-card"></div>
+                            <div class="chart-card">
+                                <canvas id="hf-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="page-content" id="page-comparison" style="display: none;">
+                <h1>VADER vs. Hugging Face</h1>
+                <div class="comparison-wrapper" id="comparison-content">
+                    </div>
+            </section>
+
+            <section class="page-content" id="page-topwords" style="display: none;">
+                <h1>Top Words</h1>
+                <div class="placeholder-page">
+                    <i class="fa-solid fa-font"></i>
+                    <h2>Feature in Development</h2>
+                    <p>This feature will process your text to extract and visualize the most frequent and impactful positive and negative keywords.</p>
+                </div>
+            </section>
+
+            <section class="page-content" id="page-database" style="display: none;">
+                <h1>Database & Download</h1>
+                <div class="placeholder-page">
+                    <i class="fa-solid fa-database"></i>
+                    <h2>Feature in Development</h2>
+                    <p>This feature will allow you to save analysis results to a project database and download CSV reports.</p>
+                </div>
+            </section>
+            
+        </main>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
