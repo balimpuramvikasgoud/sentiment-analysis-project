@@ -33,13 +33,13 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // --- Page 1: VADER ---
-    setupAnalysisPage('vader');
+    setupAnalysisPage('vader', '/analyze-vader/');
     
     // --- Page 2: HUGGING FACE ---
-    setupAnalysisPage('hf');
+    setupAnalysisPage('hf', '/analyze-huggingface/');
 
     // --- Main Setup Function for Analysis Pages ---
-    function setupAnalysisPage(modelType) {
+    function setupAnalysisPage(modelType, endpointUrl) {
         const textInput = document.getElementById(`${modelType}-text-input`);
         const fileInput = document.getElementById(`${modelType}-file-input`);
         const fileNameSpan = document.getElementById(`${modelType}-file-name`);
@@ -95,7 +95,8 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             
             try {
-                const response = await fetch(`/analyze-${modelType}/`, {
+                // Use the correct 'endpointUrl' variable
+                const response = await fetch(endpointUrl, {
                     method: "POST",
                     body: formData,
                 });
@@ -117,10 +118,22 @@ document.addEventListener("DOMContentLoaded", () => {
                 
             } catch (error) {
                 console.error("Error:", error);
-                outputArea.innerHTML = `<p style="color: red; text-align: center;"><b>Error:</b> ${error.message}</p>`;
-            } finally {
-                // Hide loader
+                // Display error in the results box
+                placeholder.style.display = "none";
                 loader.style.display = "none";
+                resultsWrapper.style.display = "flex"; // Show the wrapper to display error
+                // Clear previous results before showing error
+                resultsWrapper.querySelector('.stats-card').innerHTML = '';
+                resultsWrapper.querySelector('.preview-card').style.display = 'none';
+                resultsWrapper.querySelector('.chart-card').style.display = 'none';
+                // Show error message
+                resultsWrapper.querySelector('.stats-card').innerHTML = `<p style="color: red; text-align: center;"><b>Error:</b> ${error.message}</p>`;
+
+            } finally {
+                // Hide loader in case of success (it's already hidden on error display logic)
+                if(!error){ // Only hide loader if no error occurred, else error handling takes over
+                   loader.style.display = "none";
+                }
                 resetInputs(textInput, fileInput, fileNameSpan);
             }
         });
@@ -131,6 +144,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const resultsWrapper = document.getElementById(`${modelType}-results-wrapper`);
         const statsCard = resultsWrapper.querySelector(".stats-card");
         const previewCard = resultsWrapper.querySelector(".preview-card");
+        const chartCard = resultsWrapper.querySelector(".chart-card");
         
         // 1. Build Stats Card
         const sentimentClass = data.sentiment.toLowerCase();
@@ -178,6 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         
         // 3. Build Chart
+        chartCard.style.display = "block";
         renderChart(modelType, data.analysis_type, data.chart_data, chartCanvas);
         
         // 4. Show results
@@ -199,6 +214,27 @@ document.addEventListener("DOMContentLoaded", () => {
             // Bar Chart for single text
             const labels = Object.keys(chartData);
             const data = Object.values(chartData);
+            
+            let backgroundColors;
+            if (modelType === 'vader') {
+                 // VADER order: pos, neg, neu, compound
+                 backgroundColors = [
+                    'rgba(40, 167, 69, 0.7)',  // Positive
+                    'rgba(220, 53, 69, 0.7)', // Negative
+                    'rgba(108, 117, 125, 0.7)', // Neutral
+                    'rgba(0, 123, 255, 0.7)'  // Compound
+                ];
+            } else {
+                 // HF model returns Negative, Neutral, Positive
+                 // Ensure labels match this order for colors
+                 backgroundColors = labels.map(label => {
+                     if (label.toLowerCase() === 'negative') return 'rgba(220, 53, 69, 0.7)';
+                     if (label.toLowerCase() === 'neutral') return 'rgba(108, 117, 125, 0.7)';
+                     if (label.toLowerCase() === 'positive') return 'rgba(40, 167, 69, 0.7)';
+                     return 'rgba(0, 123, 255, 0.7)'; // Default color
+                 });
+            }
+            
             chartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -206,41 +242,41 @@ document.addEventListener("DOMContentLoaded", () => {
                     datasets: [{
                         label: 'Score',
                         data: data,
-                        backgroundColor: [
-                            'rgba(40, 167, 69, 0.7)',  // Positive
-                            'rgba(220, 53, 69, 0.7)', // Negative
-                            'rgba(108, 117, 125, 0.7)', // Neutral
-                            'rgba(0, 123, 255, 0.7)'  // Compound/Other
-                        ]
+                        backgroundColor: backgroundColors
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false, // <-- FIX FOR ZOOM
                     plugins: { legend: { display: false } },
-                    title: { display: true, text: 'Sentiment Scores' }
+                    scales: { y: { beginAtZero: true, max: 1.0 } }
                 }
             });
         } else {
             // Pie Chart for CSV
             const labels = Object.keys(chartData);
             const data = Object.values(chartData);
+             // Ensure colors match labels for pie chart too
+             const backgroundColors = labels.map(label => {
+                 if (label.toLowerCase() === 'positive') return 'rgba(40, 167, 69, 0.7)';
+                 if (label.toLowerCase() === 'negative') return 'rgba(220, 53, 69, 0.7)';
+                 if (label.toLowerCase() === 'neutral') return 'rgba(108, 117, 125, 0.7)';
+                 return 'rgba(0, 123, 255, 0.7)'; // Default
+             });
+
             chartInstance = new Chart(ctx, {
                 type: 'pie',
                 data: {
                     labels: labels,
                     datasets: [{
                         data: data,
-                        backgroundColor: [
-                            'rgba(40, 167, 69, 0.7)',  // Positive
-                            'rgba(220, 53, 69, 0.7)', // Negative
-                            'rgba(108, 117, 125, 0.7)'  // Neutral
-                        ]
+                        backgroundColor: backgroundColors
                     }]
                 },
                 options: {
                     responsive: true,
-                    plugins: { legend: { position: 'top' } },
-                    title: { display: true, text: 'Review Sentiment Breakdown' }
+                    maintainAspectRatio: false, // <-- FIX FOR ZOOM
+                    plugins: { legend: { position: 'top' } }
                 }
             });
         }
@@ -257,8 +293,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const content = document.getElementById("comparison-content");
         
         if (vaderLastResult && hfLastResult) {
+            
+            // Determine score labels
+            let vaderScoreLabel = vaderLastResult.analysis_type === 'csv' ? 'Total Reviews' : 'Compound Score';
+            let hfScoreLabel = hfLastResult.analysis_type === 'csv' ? 'Total Reviews' : 'Confidence Score';
+            
             content.innerHTML = `
-                <p>Comparing the last analysis run on both models. Ensure you have analyzed the same input on both pages for a direct comparison.</p>
+                <p>Comparing the last analysis run on both models. For a true comparison, please analyze the same input on both pages.</p>
                 <table class="comparison-table">
                     <thead>
                         <tr>
@@ -280,8 +321,8 @@ document.addEventListener("DOMContentLoaded", () => {
                         </tr>
                         <tr>
                             <td>Score</td>
-                            <td>${vaderLastResult.score.toFixed(4)}</td>
-                            <td>${hfLastResult.score.toFixed(4)}</td>
+                            <td>${vaderLastResult.score.toFixed(4)} <i>(${vaderScoreLabel})</i></td>
+                            <td>${hfLastResult.score.toFixed(4)} <i>(${hfScoreLabel})</i></td>
                         </tr>
                         <tr>
                             <td>Execution Time</td>
@@ -304,14 +345,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Helper Functions ---
     function buildPreviewTable(rows) {
+        if (!rows || rows.length === 0) return '<p>No preview data available.</p>';
         let html = '<table class="preview-table"><thead><tr>';
         const header = rows[0];
-        header.forEach(h => html += `<th>${h}</th>`);
+        header.forEach(h => html += `<th>${h || ''}</th>`); // Add check for null header
         html += '</tr></thead><tbody>';
         
         for (let i = 1; i < rows.length; i++) {
             html += '<tr>';
-            rows[i].forEach(col => html += `<td>${col}</td>`);
+            // Ensure row has same length as header, pad if necessary
+            const row = rows[i] || [];
+            for(let j=0; j<header.length; j++){
+                 html += `<td>${row[j] || ''}</td>`; // Add check for null cell
+            }
             html += '</tr>';
         }
         

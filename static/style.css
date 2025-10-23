@@ -231,13 +231,26 @@ button:hover {
 .stat-item .value.negative { color: var(--negative); }
 .stat-item .value.neutral { color: var(--neutral); }
 
-.preview-table-wrapper { max-height: 200px; overflow-y: auto; }
+/* --- FIX FOR TABLE --- */
+.preview-table-wrapper { 
+    max-height: 200px; 
+    overflow-y: auto; 
+    overflow-x: auto; /* <-- ADDED THIS LINE */
+}
 .preview-table { width: 100%; border-collapse: collapse; }
 .preview-table th, .preview-table td {
     padding: 8px 12px; border: 1px solid var(--border-color);
     text-align: left; font-size: 0.9em;
 }
 .preview-table th { background: #f1f5f9; font-weight: 600; }
+
+/* --- FIX FOR CHART --- */
+.chart-card {
+    position: relative; /* <-- ADDED THIS LINE */
+    height: 350px;     /* <-- ADDED THIS LINE (gives it a max height) */
+    width: 100%;       /* <-- ADDED THIS LINE */
+}
+
 
 /* --- Comparison & Placeholder Page Styles --- */
 .placeholder-page {
