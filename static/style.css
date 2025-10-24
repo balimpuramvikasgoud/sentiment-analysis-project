@@ -122,6 +122,8 @@ body {
 
 .output-card {
     min-height: 400px;
+    display: flex; /* Use flexbox to manage internal layout */
+    flex-direction: column; /* Stack children vertically */
 }
 
 .input-card h3 {
@@ -192,7 +194,7 @@ button:hover {
 /* --- Output Area Styles --- */
 .placeholder {
     display: flex; flex-direction: column; align-items: center;
-    justify-content: center; height: 100%; min-height: 400px;
+    justify-content: center; flex-grow: 1; /* Allow placeholder to fill space */
     text-align: center; color: var(--text-light);
 }
 .placeholder i { font-size: 4em; color: var(--border-color); }
@@ -200,7 +202,7 @@ button:hover {
 
 .loader-container {
     display: none; flex-direction: column; align-items: center;
-    justify-content: center; min-height: 400px;
+    justify-content: center; flex-grow: 1; /* Allow loader to fill space */
     text-align: center; color: var(--text-light);
 }
 .loader-container p { font-size: 1.2em; font-weight: 500; margin-top: 15px; }
@@ -211,44 +213,69 @@ button:hover {
 }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-.results-wrapper { display: none; flex-direction: column; gap: 20px; }
+.results-wrapper {
+    display: none; /* Hidden by default, shown by JS */
+    flex-direction: column;
+    gap: 20px;
+    width: 100%; /* Ensure it takes full width */
+}
 
 .stats-card, .preview-card, .chart-card {
     background: #fcfdff;
     border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 20px;
+    box-sizing: border-box; /* Include padding in width calculation */
+    width: 100%; /* Make cards take full width */
 }
 .stats-card h3, .preview-card h3, .chart-card h3 {
     margin-top: 0;
     color: #1e293b;
+    margin-bottom: 15px; /* Add space below headings */
 }
 
 .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 .stat-item .label { font-size: 0.9em; color: var(--text-light); margin-bottom: 5px; }
-.stat-item .value { font-size: 1.4em; font-weight: 600; }
+.stat-item .value { font-size: 1.4em; font-weight: 600; word-break: break-word; /* Prevent long words overflowing */ }
 .stat-item .value.positive { color: var(--positive); }
 .stat-item .value.negative { color: var(--negative); }
 .stat-item .value.neutral { color: var(--neutral); }
 
 /* --- FIX FOR TABLE --- */
-.preview-table-wrapper { 
-    max-height: 200px; 
-    overflow-y: auto; 
-    overflow-x: auto; /* <-- ADDED THIS LINE */
+.preview-table-wrapper {
+    max-height: 200px;
+    overflow-y: auto;
+    overflow-x: auto; /* Adds horizontal scroll if needed */
+    width: 100%; /* Ensure wrapper takes full width */
+    box-sizing: border-box;
 }
-.preview-table { width: 100%; border-collapse: collapse; }
+.preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed; /* Helps prevent overly wide columns */
+}
 .preview-table th, .preview-table td {
     padding: 8px 12px; border: 1px solid var(--border-color);
     text-align: left; font-size: 0.9em;
+    white-space: nowrap; /* Prevent text wrapping initially */
+    overflow: hidden; /* Hide overflow */
+    text-overflow: ellipsis; /* Show ellipsis (...) for overflow */
+    max-width: 150px; /* Limit column width - adjust as needed */
 }
 .preview-table th { background: #f1f5f9; font-weight: 600; }
 
 /* --- FIX FOR CHART --- */
 .chart-card {
-    position: relative; /* <-- ADDED THIS LINE */
-    height: 350px;     /* <-- ADDED THIS LINE (gives it a max height) */
-    width: 100%;       /* <-- ADDED THIS LINE */
+    position: relative;
+    height: 350px; /* Fixed height */
+    width: 100%;
+    overflow: hidden; /* Prevent canvas overflow */
+    box-sizing: border-box;
+}
+/* Ensure canvas itself fills the container */
+.chart-card canvas {
+    max-width: 100%;
+    max-height: 100%;
 }
 
 
@@ -276,3 +303,27 @@ button:hover {
 }
 .comparison-table th { background: #f1f5f9; font-weight: 600; }
 .comparison-table td:first-child { font-weight: 600; color: #1e293b; }
+
+/* --- Responsive Adjustments --- */
+@media (max-width: 900px) {
+    .app-container {
+        flex-direction: column; /* Stack sidebar and content on small screens */
+    }
+    .sidebar {
+        width: 100%;
+        height: auto;
+        /* Consider making sidebar collapsible on mobile */
+    }
+    .main-content {
+        padding: 20px;
+    }
+    .content-layout {
+        grid-template-columns: 1fr; /* Stack input and output cards */
+    }
+    .output-card {
+        min-height: 300px; /* Adjust min height */
+    }
+    .chart-card {
+        height: 300px; /* Adjust chart height */
+    }
+}
