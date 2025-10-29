@@ -23,7 +23,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from collections import Counter
 import re # For removing punctuation
-import nltk.downloader # Import the base downloader module
+import nltk.downloader
 from urllib.error import URLError
 
 # --- Model Name ---
@@ -34,60 +34,48 @@ vader_analyzer = None
 hf_tokenizer = None
 hf_model = None
 nltk_stopwords = None
-nltk_punkt_downloaded = False # Flag to check download status
+nltk_punkt_downloaded = False
 
-# --- LIFESPAN EVENT: Runs on server startup to load models & data ---
+# --- LIFESPAN EVENT ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global vader_analyzer, hf_tokenizer, hf_model, nltk_stopwords, nltk_punkt_downloaded
     print("Server starting up...")
     print("Warming up VADER model...")
     vader_analyzer = SentimentIntensityAnalyzer()
-    print("Checking/Downloading NLTK data (punkt, punkt_tab, stopwords)...")
-    nltk_data_path = os.path.expanduser('~/nltk_data')
-    if not os.path.exists(nltk_data_path):
-        try: os.makedirs(nltk_data_path)
-        except OSError as e: print(f"Warning: Could not create NLTK data directory {nltk_data_path}: {e}")
+    print("Checking/Downloading NLTK data...")
+    nltk_data_path = os.path.expanduser('~/nltk_data'); os.makedirs(nltk_data_path, exist_ok=True)
     if nltk_data_path not in nltk.data.path: nltk.data.path.append(nltk_data_path)
     nltk_download_list = ['punkt', 'stopwords', 'punkt_tab']
     for item in nltk_download_list:
         try:
-            print(f"- Checking NLTK resource: {item}...")
-            nltk.data.find(f'tokenizers/{item}' if item.startswith('punkt') else f'corpora/{item}')
-            print(f"- Resource '{item}' found.")
+            print(f"- Checking NLTK: {item}..."); nltk.data.find(f'tokenizers/{item}' if item.startswith('punkt') else f'corpora/{item}')
+            print(f"- Found: {item}.")
             if item == 'punkt': nltk_punkt_downloaded = True
             if item == 'stopwords': nltk_stopwords = set(stopwords.words('english'))
         except LookupError:
-            print(f"- Resource '{item}' not found. Attempting download...")
+            print(f"- Downloading NLTK: {item}...");
             try:
                 nltk.download(item, download_dir=nltk_data_path, quiet=False)
                 nltk.data.find(f'tokenizers/{item}' if item.startswith('punkt') else f'corpora/{item}')
-                print(f"- Resource '{item}' downloaded successfully.")
+                print(f"- Download OK: {item}.")
                 if item == 'punkt': nltk_punkt_downloaded = True
                 if item == 'stopwords': nltk_stopwords = set(stopwords.words('english'))
-            except URLError as e: print(f"ERROR downloading NLTK '{item}': Network error ({e})."); print("Top words may fail."); nltk_punkt_downloaded = nltk_punkt_downloaded or (item != 'punkt'); nltk_stopwords = nltk_stopwords if item != 'stopwords' else None
-            except LookupError: print(f"ERROR: NLTK '{item}' LookupError after download."); nltk_punkt_downloaded = nltk_punkt_downloaded or (item != 'punkt'); nltk_stopwords = nltk_stopwords if item != 'stopwords' else None
-            except Exception as e: print(f"Unexpected error downloading NLTK '{item}': {e}"); nltk_punkt_downloaded = nltk_punkt_downloaded or (item != 'punkt'); nltk_stopwords = nltk_stopwords if item != 'stopwords' else set()
-    if nltk_stopwords is None: print("Warning: Failed to load stopwords."); nltk_stopwords = set()
-    print(f"Warming up Hugging Face model: {MODEL_NAME}...")
-    print("This may take 2-5 minutes if downloading for the first time...")
-    try:
-        hf_tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-        hf_model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
-        print("Hugging Face model loaded.")
-    except Exception as e: print(f"FATAL: Failed to load Hugging Face model: {e}")
+            except Exception as e: print(f"ERROR downloading NLTK '{item}': {e}"); print("Top words may fail."); nltk_stopwords = nltk_stopwords if item != 'stopwords' else set() # Fallback
+    if nltk_stopwords is None: print("Warning: Stopwords load failed."); nltk_stopwords = set()
+    print(f"Warming up Hugging Face model: {MODEL_NAME}..."); print("May take 2-5 min...")
+    try: hf_tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME); hf_model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME); print("HF model loaded.")
+    except Exception as e: print(f"FATAL: Failed HF model load: {e}")
     print("Startup sequence complete.")
     yield
     print("Server shutting down...")
 
-# --- Create FastAPI App ---
+# --- App Setup ---
 app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# --- Pydantic Model for Text ---
 class TextInput(BaseModel): text: str
 
-# --- Helper: Get CSV Preview ---
+# --- Helpers ---
 def get_csv_preview(content: bytes):
     preview_data = []
     try: decoded_content = content.decode('utf-8', errors='ignore')
@@ -106,7 +94,6 @@ def get_csv_preview(content: bytes):
     except csv.Error as e: print(f"CSV Preview Error: {e}"); return [['Error parsing preview']]
     except Exception as e: print(f"Preview Error: {e}"); return [['Error reading preview']]
 
-# --- Helper: Analyze text with Hugging Face ---
 def analyze_huggingface_text(text: str):
     if not hf_tokenizer or not hf_model: raise RuntimeError("HF models not loaded.")
     if not isinstance(text, str): text = str(text)
@@ -122,7 +109,6 @@ def analyze_huggingface_text(text: str):
     expected = ["Negative", "Neutral", "Positive"]; [chart_data.setdefault(l, 0.0) for l in expected]
     return {"sentiment": sentiment, "score": score, "chart_data": chart_data}
 
-# --- Helper: Get Top Words ---
 def get_top_words(text: str, num_words: int = 10):
     if not nltk_punkt_downloaded: return ["Error: NLTK tokenizer missing."]
     current_stopwords = nltk_stopwords if nltk_stopwords is not None else set()
@@ -138,7 +124,6 @@ def get_top_words(text: str, num_words: int = 10):
         return [word for word, count in word_counts.most_common(num_words)]
     except Exception as e: print(f"Top words error: {e}"); traceback.print_exc(); return ["Error processing keywords."]
 
-# --- Generic Error Handler ---
 async def handle_analysis_error(e: Exception):
     print("="*20 + " ANALYSIS ERROR " + "="*20); traceback.print_exc(); print("="*56)
     status_code = 500; detail = f"Internal Server Error: {type(e).__name__}."
@@ -148,7 +133,6 @@ async def handle_analysis_error(e: Exception):
     elif isinstance(e, UnicodeDecodeError): detail = "File Encoding Error."; status_code = 400
     elif isinstance(e, csv.Error): detail = f"CSV Parsing Error: {e}"; status_code = 400
     elif isinstance(e, LookupError): detail = f"Server Config Error: NLTK data missing ('{e}')."; status_code=500
-    # Add timeout error? Needs async timeout library
     return JSONResponse(status_code=status_code, content={"detail": detail})
 
 # --- ENDPOINT 1: VADER ANALYSIS ---
@@ -167,7 +151,7 @@ async def analyze_vader(text_input: str = Form(None), file_input: UploadFile = F
             try: full_text_for_top_words = contents.decode('utf-8', errors='ignore')
             except Exception: full_text_for_top_words = contents.decode('latin-1', errors='ignore')
             if filename.endswith('.txt'): analysis_result = analyze_vader_text(full_text_for_top_words, start_time, preview=None)
-            elif filename.endswith('.csv'): preview_data = get_csv_preview(contents); analysis_result = analyze_vader_csv(contents, start_time, preview_data)
+            elif filename.endswith('.csv'): preview_data = get_csv_preview(contents); analysis_result = analyze_vader_csv(contents, start_time, preview_data) # Limit is inside
             else: raise HTTPException(status_code=400, detail="Use .txt or .csv.")
         elif text_input: full_text_for_top_words = text_input; analysis_result = analyze_vader_text(text_input, start_time, preview=None)
         if analysis_result: analysis_result["top_words"] = get_top_words(full_text_for_top_words)
@@ -186,6 +170,7 @@ def analyze_vader_text(text: str, start_time: float, preview: list | None):
 
 def analyze_vader_csv(contents: bytes, start_time: float, preview: list | None):
     counts = {"Positive": 0, "Negative": 0, "Neutral": 0}
+    limit_info = None # For limit message
     try: decoded_content = contents.decode('utf-8', errors='ignore')
     except Exception: decoded_content = contents.decode('latin-1', errors='ignore')
     reader = csv.DictReader(io.StringIO(decoded_content))
@@ -194,9 +179,19 @@ def analyze_vader_csv(contents: bytes, start_time: float, preview: list | None):
     for name_lower in ["reviewtext", "review", "text"]:
         if name_lower in fieldnames_lower: review_col = fieldnames_lower[name_lower]; break
     if not review_col: raise HTTPException(status_code=400, detail=f"Review column not found. Header: {reader.fieldnames}")
-    reviews_processed = 0; MAX_ROWS = 10000
+
+    reviews_processed = 0
+    # --- VADER LIMIT SET TO 50 ---
+    MAX_ROWS_VADER = 50 
+    limit_reached = False
+
     for i, row in enumerate(reader):
-        if i >= MAX_ROWS: print(f"WARNING: VADER CSV stopped after {MAX_ROWS} rows."); break
+        if i >= MAX_ROWS_VADER:
+            print(f"INFO: VADER CSV processing stopped after {MAX_ROWS_VADER} rows due to limit.")
+            limit_info = f"Analysis limited to the first {MAX_ROWS_VADER} rows for comparison consistency."
+            limit_reached = True
+            break # Stop processing
+
         try:
             text = row.get(review_col)
             if text:
@@ -209,9 +204,20 @@ def analyze_vader_csv(contents: bytes, start_time: float, preview: list | None):
                     else: counts["Neutral"] += 1
                     reviews_processed += 1
         except Exception as e: print(f"Warn: VADER CSV row {i+1} error: {e}. Skipping."); continue
-    if reviews_processed == 0: raise HTTPException(status_code=400, detail="No valid reviews processed.")
+
+    if reviews_processed == 0 and not limit_reached:
+         try: reader_check = csv.DictReader(io.StringIO(decoded_content)); _=next(reader_check); _=next(reader_check); raise HTTPException(status_code=400, detail="No valid reviews processed.")
+         except StopIteration: raise HTTPException(status_code=400, detail="CSV has no data rows.")
+         except Exception: raise HTTPException(status_code=400, detail="Could not verify CSV.")
+
     end_time = time.time()
-    return {"analysis_type":"csv", "model":"VADER", "sentiment":"Summary", "score":reviews_processed, "chart_data":counts, "execution_time":round(end_time-start_time, 4), "preview_data":preview}
+    result = {
+        "analysis_type":"csv", "model":"VADER", "sentiment":"Summary",
+        "score":reviews_processed, "chart_data":counts,
+        "execution_time":round(end_time-start_time, 4), "preview_data":preview
+    }
+    if limit_info: result["limit_info"] = limit_info
+    return result
 
 # --- ENDPOINT 2: HUGGING FACE ANALYSIS ---
 @app.post("/analyze-huggingface/")
@@ -229,7 +235,7 @@ async def analyze_huggingface(text_input: str = Form(None), file_input: UploadFi
             try: full_text_for_top_words = contents.decode('utf-8', errors='ignore')
             except Exception: full_text_for_top_words = contents.decode('latin-1', errors='ignore')
             if filename.endswith('.txt'): analysis_result = analyze_hf_text(full_text_for_top_words, start_time, preview=None)
-            elif filename.endswith('.csv'): preview_data = get_csv_preview(contents); analysis_result = analyze_hf_csv(contents, start_time, preview_data)
+            elif filename.endswith('.csv'): preview_data = get_csv_preview(contents); analysis_result = analyze_hf_csv(contents, start_time, preview_data) # Limit is inside
             else: raise HTTPException(status_code=400, detail="Use .txt or .csv.")
         elif text_input: full_text_for_top_words = text_input; analysis_result = analyze_hf_text(text_input, start_time, preview=None)
         if analysis_result: analysis_result["top_words"] = get_top_words(full_text_for_top_words)
@@ -244,6 +250,7 @@ def analyze_hf_text(text: str, start_time: float, preview: list | None):
 
 def analyze_hf_csv(contents: bytes, start_time: float, preview: list | None):
     counts = {"Positive": 0, "Negative": 0, "Neutral": 0, "Unknown": 0}
+    limit_info = None
     try: decoded_content = contents.decode('utf-8', errors='ignore')
     except Exception: decoded_content = contents.decode('latin-1', errors='ignore')
     reader = csv.DictReader(io.StringIO(decoded_content))
@@ -254,61 +261,39 @@ def analyze_hf_csv(contents: bytes, start_time: float, preview: list | None):
     if not review_col: raise HTTPException(status_code=400, detail=f"Review column not found. Header: {reader.fieldnames}")
     
     reviews_processed = 0
-    MAX_ROWS_HF = 500 # Keep limit low for Codespaces memory
+    # --- *** REDUCED LIMIT FOR HUGGING FACE *** ---
+    MAX_ROWS_HF = 20 # Limit processing to the first 20 rows
+    limit_reached = False
     
     for i, row in enumerate(reader):
         if i >= MAX_ROWS_HF:
-            print(f"Warn: HF CSV stopped after {MAX_ROWS_HF} rows due to limit.")
-            break # Stop processing after limit
+            print(f"INFO: HF CSV stopped after {MAX_ROWS_HF} rows (limit).")
+            limit_info = f"Analysis limited to the first {MAX_ROWS_HF} rows for performance."
+            limit_reached = True; break
         
-        # --- ADDED TRY/EXCEPT INSIDE LOOP ---
         try:
             text = row.get(review_col)
             if text:
                  if not isinstance(text, str): text = str(text)
                  text_cleaned = text.replace('\n', ' ').replace('\r', '').strip()
                  if text_cleaned:
-                     # Analyze row by row - potential MemoryError here
                      sentiment = analyze_huggingface_text(text_cleaned)["sentiment"]
                      counts[sentiment] = counts.get(sentiment, 0) + 1
                      reviews_processed += 1
-        except MemoryError:
-            # If a MemoryError occurs, stop processing and raise a specific HTTPException
-            print(f"ERROR: MemoryError encountered while processing row {i+1}. Stopping CSV analysis.")
-            raise HTTPException(status_code=500, detail=f"Processing stopped due to Memory Error after analyzing ~{reviews_processed} rows. Try a smaller file.")
-        except Exception as e:
-            # Log other errors but try to continue
-            print(f"Warn: HF CSV row {i+1} error: {type(e).__name__} - {e}. Skipping.")
-            traceback.print_exc(limit=1) # Print short traceback for context
-            continue # Skip to next row
+        except MemoryError: raise HTTPException(status_code=500, detail=f"Memory Error after ~{reviews_processed} rows (limit {MAX_ROWS_HF}).")
+        except Exception as e: print(f"Warn: HF CSV row {i+1} error: {type(e).__name__}. Skipping."); continue
 
-    if reviews_processed == 0:
-        # Check if the file had rows but none were processed (e.g., all empty or errors)
-        try:
-             # Check if there were any rows beyond header by trying to read again
-             reader_check = csv.DictReader(io.StringIO(decoded_content))
-             _ = next(reader_check) # Skip header
-             _ = next(reader_check) # Try to read first data row
-             # If we get here, rows existed but weren't processed
-             raise HTTPException(status_code=400, detail="No valid reviews processed. Check column name and content.")
-        except StopIteration:
-              # This means only a header row (or empty file) existed
-             raise HTTPException(status_code=400, detail="CSV file contains no data rows.")
-        except HTTPException: # Re-raise exceptions from earlier checks
-             raise
-        except Exception: # Catch any other errors during the check
-             raise HTTPException(status_code=400, detail="Could not verify CSV content after processing.")
-
+    if reviews_processed == 0 and not limit_reached:
+         try: reader_check = csv.DictReader(io.StringIO(decoded_content)); _=next(reader_check); _=next(reader_check); raise HTTPException(status_code=400, detail="No valid reviews processed.")
+         except StopIteration: raise HTTPException(status_code=400, detail="CSV has no data rows.")
+         except Exception: raise HTTPException(status_code=400, detail="Could not verify CSV.")
 
     end_time = time.time()
     if counts.get("Unknown", 0) == 0: counts.pop("Unknown", None)
     
-    return {
-        "analysis_type": "csv", "model": "Hugging Face", "sentiment": "Summary",
-        "score": reviews_processed, # Return number processed
-        "chart_data": counts, "execution_time": round(end_time - start_time, 4),
-        "preview_data": preview
-    }
+    result = { "analysis_type": "csv", "model": "Hugging Face", "sentiment": "Summary", "score": reviews_processed, "chart_data": counts, "execution_time": round(end_time - start_time, 4), "preview_data": preview }
+    if limit_info: result["limit_info"] = limit_info
+    return result
 
 
 # --- ENDPOINT 3: TOP WORDS ONLY ---
@@ -331,11 +316,8 @@ async def analyze_topwords(text_input: str = Form(None), file_input: UploadFile 
 
         is_error = isinstance(top_words_list, list) and top_words_list and "error" in top_words_list[0].lower()
         if is_error:
-             # Raise specific exception types based on message
-             if "missing" in top_words_list[0].lower():
-                 raise LookupError(top_words_list[0]) # For NLTK data issues
-             else:
-                  raise RuntimeError(top_words_list[0]) # For other processing errors
+             if "missing" in top_words_list[0].lower(): raise LookupError(top_words_list[0])
+             else: raise RuntimeError(top_words_list[0])
 
         return { "analysis_type": "top_words", "model": "NLTK", "top_words": top_words_list, "execution_time": round(end_time - start_time, 4) }
     except Exception as e: return await handle_analysis_error(e)
